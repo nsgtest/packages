@@ -12,93 +12,103 @@ import(
 	"github.com/nsgtest/packages/interfaces"
 )
 
+var slice []interfaces.Interface
+
 type Struct struct{
 	File	string
 	Object	interfaces.Interface
-	Array	interfaces.Interfaces
 }
 
 func (s Struct) Add(matches []int){
-	indices, counts := s.Find(matches)
+	s.Read()
+	indices := s.Find(matches)
 
-	if len(indices) > 0{
-		fmt.Printf("FAIL!\n\nCurrent:\n")
+	if len(indices) != len(slice){
+		fmt.Println("FAIL!")
+		fmt.Println("Current:")
+		fmt.Printf("\n")
 		s.Output()
 		fmt.Printf("\n")
-		for i, index := range indices{
-			s.Array[index].Message(counts[i])
-			fmt.Printf("\n")
-			s.Object = s.Array[index]
-			s.Output()
-			fmt.Printf("\n")
-
-			if i == len(indices) - 1{
-				panic(nil)
-			}
-		}
+		fmt.Printf("\nFound similiar %v!\n", reflect.TypeOf(s.Object).Name())
+		panic(nil)
 	}
 
-	s.Array = append(s.Array, s.Object)
+	slice = append(slice, s.Object)
 	s.Write()
 }
 
 func (s Struct) Update(matches []int){
-	indices, _ := s.Find(matches)
+	s.Read()
+	indices := s.Find(matches)
+
 	if len(indices) == 0{
-		fmt.Printf("FAIL!\n\nCurrent:\n")
+		fmt.Println("FAIL!")
+		fmt.Println("Current:")
+		fmt.Printf("\n")
 		s.Output()
 		fmt.Printf("\n")
-		s.Object.Message(0)
-		fmt.Print("\n")
+		fmt.Println("Found nothing similar!")
 	} else {
 		for _, index := range indices{
+			reference := reflect.New(reflect.TypeOf(s.Object)).Elem()
+
 			for i := 0; i < reflect.TypeOf(s.Object).NumField(); i++{
-				if !reflect.ValueOf(s.Object).Field(i).IsZero() && reflect.ValueOf(s.Object).Field(i).Interface() != reflect.ValueOf(s.Array[index]).Field(i).Interface() {
-					reflect.ValueOf(s.Array[index]).Field(i).Set(reflect.ValueOf(s.Object).Field(i))
+				if !reflect.ValueOf(s.Object).Field(i).IsZero(){
+					reference.Field(i).Set(reflect.ValueOf(s.Object).Field(i))
+				} else {
+					reference.Field(i).Set(reflect.ValueOf(slice[index]).Field(i))
 				}
 			}
+
+			reflect.ValueOf(&slice[index]).Elem().Set(reference)
 		}
 	}
+
+	s.Write()
 }
 
 func (s Struct) Remove(matches []int){
-	indices, _ := s.Find(matches)
+	s.Read()
+	indices := s.Find(matches)
 
 	if len(indices) == 0{
-		fmt.Printf("FAIL!\n\nCurrent:\n")
+		fmt.Println("FAIL!")
+		fmt.Println("Current:")
+		fmt.Printf("\n")
 		s.Output()
 		fmt.Printf("\n")
-		s.Object.Message(0)
-		fmt.Print("\n")
+		fmt.Println("Found nothing similar!")
 	}
 
 	for i, index := range indices{
-		s.Array = append(s.Array[:index-i], s.Array[index+1-i:]...)
+		slice = append(slice[:index-i], slice[index+1-i:]...)
 	}
 
 	s.Write()
 }
 
 func (s Struct) List(){
-	if len(s.Array) < 1{
-		fmt.Printf("FAIL!\n%v is empty!\n\n", s.File)
+	s.Read()
+
+	if len(slice) < 1{
+		fmt.Println("FAIL!")
+		fmt.Printf("%v is empty!\n", s.File)
 		panic(nil)
 	}
 
-	for i, object := range s.Array{
+	for i, object := range slice{
 		s.Object = object
 		s.Output()
-		if i != len(s.Array) - 1{
+		if i != len(slice) - 1{
 			fmt.Printf("\n")
 		}
 	}
 }
 
-func (s Struct) Find(matches []int) ([]int, []int){
+func (s Struct) Find(matches []int) []int{
 	indices := []int{}
-	counts := []int{}
 
-	for i, object := range s.Array{
+	for i, object := range slice{
 		count := 0
 
 		for j := 0; j < reflect.TypeOf(object).NumField(); j++{
@@ -110,27 +120,50 @@ func (s Struct) Find(matches []int) ([]int, []int){
 		for _, match := range matches{
 			if count == match{
 				indices = append(indices, i)
-				counts = append(counts, count)
 				break
 			}
 		}
 
 	}
-	return indices, counts
+	return indices
+}
+
+func (s Struct) Read(){
+	enc, err := ioutil.ReadFile(s.File)
+	if err != nil{
+		fmt.Println("FAIL!")
+		fmt.Printf("Could not read from %v!\n", s.File)
+		panic(err)
+	}
+
+	references := reflect.New(reflect.SliceOf(reflect.TypeOf(s.Object))).Interface()
+	err = json.Unmarshal(enc, references)
+	if err != nil{
+		fmt.Println("FAIL!")
+		fmt.Println("%v is not a JSON file!\n", s.File)
+		panic(err)
+	}
+
+	slice = make([]interfaces.Interface, reflect.ValueOf(references).Elem().Len())
+	for i := 0; i < reflect.ValueOf(references).Elem().Len(); i++{
+		reflect.ValueOf(&slice[i]).Elem().Set(reflect.ValueOf(references).Elem().Index(i))
+	}
 }
 
 func (s Struct) Write(){
 	_, err := os.Stat(path.Dir(s.File))
 	if os.IsNotExist(err){
-		fmt.Printf("FAIL!\nDirectory %v does not exist!\n\n", path.Dir(s.File))
+		fmt.Println("FAIL!")
+		fmt.Printf("Directory %v does not exist!\n", path.Dir(s.File))
 		panic(err)
 	}
 
-	enc, _ := json.Marshal(s.Array)
+	enc, _ := json.Marshal(slice)
 
 	err = ioutil.WriteFile(s.File, enc, 0666)
 	if err != nil{
-		fmt.Printf("FAIL!\nCould not write to %v\n\n", s.File)
+		fmt.Println("FAIL!")
+		fmt.Printf("Could not write to %v!\n", s.File)
 		panic(err)
 	}
 }

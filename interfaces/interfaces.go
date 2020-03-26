@@ -1,7 +1,5 @@
 package interfaces
 
 type Interface interface{
-	Message(int)
+	Interface()
 }
-
-type Interfaces []Interface
