@@ -6,7 +6,7 @@ import(
 	"io/ioutil"
 	"math"
 	"os"
-	"path"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"github.com/nsgtest/packages/interfaces"
@@ -151,10 +151,10 @@ func (s Struct) Read(){
 }
 
 func (s Struct) Write(){
-	_, err := os.Stat(path.Dir(s.File))
+	_, err := os.Stat(filepath.Dir(s.File))
 	if os.IsNotExist(err){
 		fmt.Println("FAIL!")
-		fmt.Printf("Directory %v does not exist!\n", path.Dir(s.File))
+		fmt.Printf("Directory %v does not exist!\n", filepath.Dir(s.File))
 		panic(err)
 	}
 
